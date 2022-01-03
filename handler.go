@@ -6,15 +6,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/joho/godotenv"
 	"github.com/slack-go/slack"
 	"github.com/machinebox/graphql"
 )
 
 func Handler() {
 
-	// Load Env variables from .dot file
-	godotenv.Load(".env")
 
 	token := os.Getenv("SLACK_AUTH_TOKEN")
 
