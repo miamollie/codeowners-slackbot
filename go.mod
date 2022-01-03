@@ -10,9 +10,6 @@ require (
 	github.com/aws/constructs-go/constructs/v3 v3.3.177
 	github.com/aws/jsii-runtime-go v1.50.0
 	github.com/awslabs/aws-lambda-go-api-proxy v0.12.0
-	github.com/go-chi/chi v4.1.2+incompatible
-	github.com/go-chi/render v1.0.1
-	github.com/joho/godotenv v1.4.0
 	github.com/machinebox/graphql v0.2.2
 	github.com/matryer/is v1.4.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
