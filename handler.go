@@ -1,76 +1,91 @@
 package main
 
 import (
-	"fmt"
-	"os"
 	"context"
-	"time"
+	"io"
+	"log"
+	"net/http"
 
-	"github.com/slack-go/slack"
 	"github.com/machinebox/graphql"
 )
 
-func Handler() {
+// handler is the function called when the lambda is invoked
+// handler function signature (context, TIn where TIn can be unmarshalled by Go)
+// return value must be either error or TOut where TOut can marshalled
 
+func Handler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("REQUEST URL: %#v", r.URL)
+	// Validate request: query params, auth header for slack, github token (?)
 
-	token := os.Getenv("SLACK_AUTH_TOKEN")
+	// make GQL request (will need to have some kinda private org repo auth check)
+	gqlresp := getCodeOwners("99designs", "aws-vault")
 
-	// Create a new client to slack by giving token
-	// Set debug to true while developing
-	client := slack.New(token, slack.OptionDebug(true))
-	// Create the Slack attachment that we will send to the channel
-	attachment := slack.Attachment{
-		Pretext: "Super Bot Message",
-		Text:    "some text",
-		// Color Styles the Text, making it possible to have like Warnings etc.
-		Color: "#36a64f",
-		// Fields are Optional extra data!
-		Fields: []slack.AttachmentField{
-			{
-				Title: "Date",
-				Value: time.Now().String(),
-			},
-		},
-	}
-	// PostMessage will send the message away.
-	// First parameter is just the channelID, makes no sense to accept it
-	_, timestamp, err := client.PostMessage(
-		"", //TODO use the channelID from the request
-		// uncomment the item below to add a extra Header to the message, try it out :)
-		slack.MsgOptionAttachments(attachment),
-	)
+	// parse GQL response - and format
 
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("Message sent at %s", timestamp)
+	// write response
+
+	io.WriteString(w, gqlresp)
 }
 
-// what should this package look like?
-// in lambda the gql client could be shared
+// should receive a repo name and org, and return codeowners file content or nil (or empty string, or the actual message?), or an error
+func getCodeOwners(org string, repo string) string {
+	graphqlClient := graphql.NewClient("https://api.github.com/graphql") //TODO get from .env
 
-func Todo() {
-	graphqlClient := graphql.NewClient("https://<GRAPHQL_API_HERE>") //TODO from env github api
-	req := graphql.NewRequest(`
-    query ($key: String!) {
-        items (id:$key) {
-            field1
-            field2
-            field3
-        }
+	// TODO change to
+	gqlQuery := `
+    query ($org: String!, $repo: String!)  {
+        repository(name: $repo", owner: $org) {
+			location1: object(expression: "master:readme.md") {
+				... on Blob {
+					text
+				}
+			}
+			location2: object(expression: "master:README.md") {
+			... on Blob {
+					text
+				}
+			}
+		}
     }
-`)
+`
+	req := graphql.NewRequest(gqlQuery)
 
-	// set any variables
-	req.Var("key", "value")
+	req.Var("org", org)
+	req.Var("repo", repo)
 
-	// set header fields
 	req.Header.Set("Cache-Control", "no-cache")
 
 	// run it and capture the response
-	var resp interface{} //todo be more specific
+	var resp RepoResponse
 	if err := graphqlClient.Run(context.Background(), req, &resp); err != nil {
-		panic(fmt.Errorf("error: %s", err)) //print to logs and return nil
+		//TODO log the error
+		log.Printf("GQL error: %#v", err)
+
+		return "Error making request"
 	}
-	fmt.Println(resp) //return resp
+
+	// if resp.errors != nil {
+	// 	return resp.errors.message, nil
+	// }
+	log.Printf("GQL resp: %#v", resp)
+	// TODO split the making of this request and the formatting of the response
+	// TODO resp.errors.message might not be null
+	return "Made it here"
+
+}
+
+type RepoContents struct {
+	text string
+}
+
+type RepoResponse struct {
+	data struct {
+		repository struct {
+			location1 RepoContents
+			location2 RepoContents
+		}
+	}
+	errors struct {
+		message string
+	}
 }
