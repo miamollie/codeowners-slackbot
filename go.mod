@@ -10,8 +10,8 @@ require (
 	github.com/aws/constructs-go/constructs/v3 v3.3.177
 	github.com/aws/jsii-runtime-go v1.50.0
 	github.com/awslabs/aws-lambda-go-api-proxy v0.12.0
-	github.com/machinebox/graphql v0.2.2
-	github.com/matryer/is v1.4.0 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
-	github.com/slack-go/slack v0.10.1
+	github.com/joho/godotenv v1.4.0
+	github.com/shurcooL/graphql v0.0.0-20200928012149-18c5c3165e3a
+	golang.org/x/net v0.0.0-20220105145211-5b0dc2dfae98 // indirect
+	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8
 )

@@ -2,11 +2,15 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 
-	"github.com/machinebox/graphql"
+	"github.com/joho/godotenv"
+	"github.com/shurcooL/graphql"
+	"golang.org/x/oauth2"
 )
 
 // handler is the function called when the lambda is invoked
@@ -22,64 +26,36 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	// parse GQL response - and format
 
-	io.WriteString(w, gqlresp+" please fricking work")
+	io.WriteString(w, string(gqlresp)+" Description!")
 }
 
 // should receive a repo name and org, and return codeowners file content or nil (or empty string, or the actual message?), or an error
-func getCodeOwners(org string, repo string) string {
-	graphqlClient := graphql.NewClient("https://api.github.com/graphql") //TODO get from .env. Maybe do the whole gql client setup as part of a service and pass in the endpoint?
-
-	gqlQuery := `
-    query ($repo: String!, $org: String!) {
-        repository(name: $repo, owner: $org) {
-    		location1: object(expression: "master:CODEOWNERS") {
-			... on Blob {
-				text
-			}
-    		location2: object(expression: "master:.gitignore/CODEOWNERS") {
-			... on Blob {
-				text
-			}
-		}
+func getCodeOwners(owner string, repo string) graphql.String {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
 	}
-}
-`
-	req := graphql.NewRequest(gqlQuery)
+	src := oauth2.StaticTokenSource(
+		&oauth2.Token{AccessToken: os.Getenv("GITHUB_GQL_AUTH_TOKEN"), TokenType: "Bearer"},
+	)
+	httpClient := oauth2.NewClient(context.Background(), src)
+	graphqlClient := graphql.NewClient(os.Getenv("GITHUB_GQL_API"), httpClient)
 
-	req.Header.Set("Cache-Control", "no-cache")
-
-	// this is the only bit that needs to happen per request
-	req.Var("org", org)
-	req.Var("repo", repo)
-
-
-	// run it and capture the response
-	var resp RepoResponse
-	if err := graphqlClient.Run(context.Background(), req, &resp); err != nil {
-		log.Printf("GQL error: %#v", err)
-
-		return "Error making request, soz"
+	var query struct {
+		Repository struct {
+			Description graphql.String
+		} `graphql:"repository(name: $name, owner: $owner)"`
 	}
 
-	log.Printf("GQL resp: %#v", resp)
-	// TODO split the making of this request and the formatting of the response
-	// TODO resp.errors.message might not be null
-	return resp.data.repository.location1.text
-
-}
-
-type repoContents struct {
-	text string
-}
-
-type repoResponse struct {
-	data struct {
-		repository struct {
-			location1 RepoContents
-			location2 RepoContents
-		}
+	vars := map[string]interface{}{
+		"owner": graphql.String(owner),
+		"name":  graphql.String(repo),
 	}
-	errors struct {
-		message string
+
+	gqlErr := graphqlClient.Query(context.Background(), &query, vars)
+	if gqlErr != nil {
+		fmt.Println(gqlErr)
 	}
+
+	return query.Repository.Description
 }
