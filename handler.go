@@ -2,13 +2,11 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
 
-	"github.com/joho/godotenv"
 	"github.com/shurcooL/graphql"
 	"golang.org/x/oauth2"
 )
@@ -19,7 +17,7 @@ import (
 
 func Handler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Query Params: %#v", r.URL.RawQuery) //needs to be decoded and then split to get the value
-	// Validate request: query params, auth header for slack, github token (?)
+	// Validate request: query params, auth header for slack, github token (..?)
 
 	// make GQL request (will need to have some kinda private org repo auth check)
 	gqlresp := getCodeOwners("miamollie", "codeowners-slackbot")
@@ -31,15 +29,13 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 // should receive a repo name and org, and return codeowners file content or nil (or empty string, or the actual message?), or an error
 func getCodeOwners(owner string, repo string) graphql.String {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
+	token := os.Getenv("GITHUB_GQL_AUTH_TOKEN")
+	api := os.Getenv("GITHUB_GQL_API")
 	src := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: os.Getenv("GITHUB_GQL_AUTH_TOKEN"), TokenType: "Bearer"},
+		&oauth2.Token{AccessToken: token, TokenType: "Bearer"},
 	)
 	httpClient := oauth2.NewClient(context.Background(), src)
-	graphqlClient := graphql.NewClient(os.Getenv("GITHUB_GQL_API"), httpClient)
+	graphqlClient := graphql.NewClient(api, httpClient)
 
 	var query struct {
 		Repository struct {
@@ -54,8 +50,10 @@ func getCodeOwners(owner string, repo string) graphql.String {
 
 	gqlErr := graphqlClient.Query(context.Background(), &query, vars)
 	if gqlErr != nil {
-		fmt.Println(gqlErr)
+		log.Printf("GQL returned an error: %+v", gqlErr)
 	}
+
+	log.Printf("Response: %+v", query)
 
 	return query.Repository.Description
 }
