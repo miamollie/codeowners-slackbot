@@ -53,7 +53,6 @@ interface VarType {
 export const handler = async (
   event: lambda.APIGatewayProxyEvent
 ): Promise<lambda.APIGatewayProxyResult> => {
-  console.log(event);
 
   if (!verifySlackRequest(event)) {
     console.log("Failed to verify request from slack");
@@ -65,7 +64,7 @@ export const handler = async (
 
   const variables = getVarsFromParams(event) || getVarsFromBody(event);
   if (!variables) {
-    console.log("Failed to retried variables from request");
+    console.log("Failed to get variables from request");
     return {
       statusCode: 200,
       body: "Sorry, couldn't read a repo and owner from that request",
@@ -173,8 +172,6 @@ function verifySlackRequest(event: lambda.APIGatewayProxyEvent) {
   const timestamp = event.headers[SLACK_TIMESTAMP_HEADER];
   const receivedSignature = event.headers[SLACK_SIGNATURE_HEADER];
 
-  console.log("body: " + body);
-  console.log("timestamp: " + timestamp);
   if (!body || !timestamp || !receivedSignature) {
     return false;
   }
@@ -182,14 +179,9 @@ function verifySlackRequest(event: lambda.APIGatewayProxyEvent) {
   const [version, slack_hash] = receivedSignature.split("=");
   const baseString = `${version}:${timestamp}:${body}`;
 
-  console.log("Base string: " + baseString);
-
   const generatedSignature = createHmac("sha256", SLACK_SIGNING_SECRET)
     .update(baseString, "utf8")
     .digest("hex");
-
-  console.log("generated: " + generatedSignature);
-  console.log("received: " + slack_hash);
 
   return timingSafeEqual(
     Buffer.from(generatedSignature, "utf8"),
