@@ -19,7 +19,7 @@ const query = gql`
           text
         }
       }
-      file2: object(expression: "master:.git/CODEOWNERS") {
+      file2: object(expression: "master:.github/CODEOWNERS") {
         ... on Blob {
           text
         }
