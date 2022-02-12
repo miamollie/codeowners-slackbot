@@ -4,4 +4,4 @@ import * as cdk from "@aws-cdk/core";
 import { CodeownersStack } from "../lib/codeowners-stack";
 
 const app = new cdk.App();
-new CodeownersStack(app, "CdkStack");
+new CodeownersStack(app, "CodeownersSlackBotStack");

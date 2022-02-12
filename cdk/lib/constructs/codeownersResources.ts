@@ -29,6 +29,7 @@ export class CodeownersLambda extends cdk.Construct {
       environment: {
         GITHUB_GQL_API: "https://api.github.com/graphql",
         GITHUB_GQL_AUTH_TOKEN: process.env.GITHUB_GQL_AUTH_TOKEN || "",
+        SLACK_SIGNING_SECRET: process.env.SLACK_SIGNING_SECRET || "",
       },
     });
   }

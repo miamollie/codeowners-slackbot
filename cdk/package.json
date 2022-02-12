@@ -9,7 +9,7 @@
     "watch": "tsc -w",
     "test": "jest",
     "cdk": "cdk",
-    "deploy": "aws-vault exec miamollie --no-session -- npm run cdk deploy"
+    "deploy": "aws-vault exec miamollie --no-session -- ../deploy.sh"
   },
   "devDependencies": {
     "@aws-cdk/aws-lambda-nodejs": "1.137.0",

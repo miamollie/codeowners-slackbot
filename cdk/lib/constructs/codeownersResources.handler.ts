@@ -1,17 +1,29 @@
 import * as lambda from "aws-lambda";
 import { request, gql } from "graphql-request";
 import { URLSearchParams } from "url";
+import { createHmac, timingSafeEqual } from "crypto";
 
-const endpoint = process.env.GITHUB_GQL_API || "";
+const API_ENDPOINT = process.env.GITHUB_GQL_API || "";
 const requestHeaders = {
   authorization: `Bearer ${process.env.GITHUB_GQL_AUTH_TOKEN}`,
 };
 
-// interface RespData {
-//   getCodeowners: { repository: {file1: }};
-// }
+const SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET || "";
 
-const query = gql`
+interface RespData {
+  repository: {
+    file1: { text: string };
+    file2: { text: string };
+    file3: { text: string };
+  } | null;
+  errors:
+    | {
+        type: string;
+      }[]
+    | null;
+}
+
+const QUERY = gql`
   query owners($name: String!, $owner: String!) {
     repository(name: $name, owner: $owner) {
       file1: object(expression: "master:CODEOWNERS") {
@@ -43,24 +55,38 @@ export const handler = async (
 ): Promise<lambda.APIGatewayProxyResult> => {
   console.log(event);
 
+  if (!verifySlackRequest(event)) {
+    console.log("Failed to verify request from slack");
+    return {
+      statusCode: 500,
+      body: "Unable to verify request from slack",
+    };
+  }
+
   const variables = getVarsFromParams(event) || getVarsFromBody(event);
   if (!variables) {
+    console.log("Failed to retried variables from request");
     return {
       statusCode: 200,
       body: "Sorry, couldn't read a repo and owner from that request",
     };
   }
 
-  console.table(variables);
+  const resp = await request<RespData>(
+    API_ENDPOINT,
+    QUERY,
+    variables,
+    requestHeaders
+  ).catch((e) => console.log("Error " + e));
 
-  // TODO add type to response https://github.com/prisma-labs/graphql-request/blob/master/examples/passing-more-options-to-fetch.ts
-  const resp = await request(endpoint, query, variables, requestHeaders).catch(
-    (e) => console.log("Error " + e)
-  );
+  if (!resp) {
+    console.log("Empty response from github api");
+    return {
+      statusCode: 200,
+      body: "Sorry, couldn't get a response from github api",
+    };
+  }
 
-  console.table(resp);
-
-  //TODO slack API for JS
   return {
     statusCode: 200,
     body: getMessageFromResp(resp),
@@ -92,12 +118,11 @@ function getVarsFromBody(
     return undefined;
   }
 
-  const params = new URLSearchParams(event.body)
+  const params = new URLSearchParams(event.body);
 
   if (!params.has("text")) {
-    return undefined
+    return undefined;
   }
-
 
   const args = params.get("text")?.split("/");
   if (!args || args.length !== 2) {
@@ -111,10 +136,13 @@ function getVarsFromBody(
   return { owner: args[0], name: args[1] };
 }
 
-function getMessageFromResp(resp: any) {
+function getMessageFromResp(resp: RespData) {
   if (resp.errors) {
     console.log(resp.errors);
-    return resp.errors[0].type || "Sorry, this repo doesn't exist or you do not have permission to view it";
+    return (
+      resp.errors[0].type ||
+      "Sorry, this repo doesn't exist or you do not have permission to view it"
+    );
   }
 
   const owners =
@@ -126,5 +154,45 @@ function getMessageFromResp(resp: any) {
     return "Sorry, couldn't get a codeowners file for this repo – either you don't have access to view it, or it hasn't been added";
   }
 
-  return `Codeowners for this repo are: ${owners}`;
+  return `Codeowners: ${owners}`;
+}
+
+const SLACK_TIMESTAMP_HEADER = "X-Slack-Request-Timestamp";
+const SLACK_SIGNATURE_HEADER = "X-Slack-Signature";
+// Concat version number, request timestamp, body of request with colon as delimiter
+// Hash basestring with HMAC SHA256 using signing secret as key
+// compare to X-Slack-Signature header
+function verifySlackRequest(event: lambda.APIGatewayProxyEvent) {
+  if (!SLACK_SIGNING_SECRET) {
+    console.log("signing secret not set");
+    return false;
+  }
+
+  const { body } = event;
+
+  const timestamp = event.headers[SLACK_TIMESTAMP_HEADER];
+  const receivedSignature = event.headers[SLACK_SIGNATURE_HEADER];
+
+  console.log("body: " + body);
+  console.log("timestamp: " + timestamp);
+  if (!body || !timestamp || !receivedSignature) {
+    return false;
+  }
+
+  const [version, slack_hash] = receivedSignature.split("=");
+  const baseString = `${version}:${timestamp}:${body}`;
+
+  console.log("Base string: " + baseString);
+
+  const generatedSignature = createHmac("sha256", SLACK_SIGNING_SECRET)
+    .update(baseString, "utf8")
+    .digest("hex");
+
+  console.log("generated: " + generatedSignature);
+  console.log("received: " + slack_hash);
+
+  return timingSafeEqual(
+    Buffer.from(generatedSignature, "utf8"),
+    Buffer.from(slack_hash, "utf8")
+  );
 }
